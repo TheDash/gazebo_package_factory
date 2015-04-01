@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package>
+  <name>gazebo_package_factory</name>
+  <version>1.0.0</version>
+  <description>The gazebo_package_factory package</description>
+
+  <maintainer email="dash@clearpathrobotics.com">Devon Ash</maintainer>
+  <license>BSD</license>
+  <url type="website">http://buildit.ros.org</url>
+  <author email="dash@clearpathrobotics.com">Devon Ash</author>
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <export>
+  </export>
+</package>

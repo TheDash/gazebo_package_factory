@@ -1,0 +1,173 @@
+#!/usr/bin/python
+#Author: Devon Ash
+
+import sys
+import os
+import shutil
+import subprocess
+import rospkg
+
+prefix = ""
+gpf_wd = ""
+description_package_name = ""
+description_launch_file = ""
+output_directory = ""
+
+def make_gazebo_resources():
+    shutil.copytree(gpf_wd+"/scripts/Media/models", output_directory+"/"+prefix+"_gazebo/Media/models")
+    return
+
+def generate_file_structure(prefix):
+    current_dir = output_directory
+    print "%s_gazebo ROS PACKAGE can be found in directory %s" % (prefix, current_dir)
+    worlds_dir = current_dir+"/"+prefix+"_gazebo/worlds/"
+    launch_dir = current_dir+"/"+prefix+"_gazebo/launch/"
+    if not os.path.exists(worlds_dir):
+        os.makedirs(worlds_dir)
+        print "Generated directory %s" % worlds_dir
+    if not os.path.exists(launch_dir):
+        os.makedirs(launch_dir)
+        print "Generated directory %s" % launch_dir
+    return
+
+def make_worlds_files():
+    shutil.copy(gpf_wd+"/scripts/worlds/race.world", output_directory+"/"+prefix+"_gazebo/worlds/"+prefix+"_race.world")
+    shutil.copy(gpf_wd+"/scripts/worlds/scenario.world", output_directory+"/"+prefix+"_gazebo/worlds/scenario1.world")
+    return
+
+def make_package_xml_file():
+    packagexml = open(output_directory+"/"+prefix+"_gazebo/package.xml", 'w')
+    packagexml.write(generate_package_xml(prefix))
+    packagexml.close()
+    return 
+
+def generate_package_xml(prefix):
+    return """<package>
+  <name>%s_gazebo</name>
+  <version>1.0.0</version>
+  <description>Launchfiles to use %s in Gazebo.</description>
+
+  <maintainer email="builditros@buildit.ros.org">Buildit ROS</maintainer>
+  <author>Buildit ROS</author>
+
+  <license>BSD</license>
+
+  <url type="website">http://wiki.ros.org/%s_gazebo</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>roslaunch</build_depend>
+  <run_depend>gazebo_ros</run_depend>
+  <run_depend>gazebo_ros_control</run_depend>
+  <run_depend>gazebo_plugins</run_depend>
+  <run_depend>hector_gazebo_plugins</run_depend>
+  <run_depend>%s_control</run_depend>
+  <run_depend>%s_description</run_depend>
+
+  <export>
+    <gazebo_ros gazebo_media_path="${prefix}"/>
+  </export>
+</package>
+
+""" % (prefix, prefix, prefix, prefix, prefix)
+
+def make_cmakelists_file():
+    cmakelists = open(output_directory+"/"+prefix+"_gazebo/CMakeLists.txt", 'w')
+    cmakelists.write(generate_cmake_lists())
+    cmakelists.close()
+    return
+
+def generate_cmake_lists():
+    return """
+cmake_minimum_required(VERSION 2.8.3)
+project(%s_gazebo)
+
+find_package(catkin REQUIRED COMPONENTS roslaunch)
+
+catkin_package()
+
+roslaunch_add_file_check(launch/%s_empty_world.launch)
+
+install(DIRECTORY launch Media worlds
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+""" % (prefix, prefix)
+
+def make_empty_world_launch_file():
+    launch = open(output_directory+"/"+prefix+"_gazebo/launch/"+prefix+"_empty_world.launch", 'w')
+    launch.write(generate_empty_world_launch_file(prefix))
+    launch.close()
+    return
+
+def generate_empty_world_launch_file(prefix):
+    return """
+	<launch>
+	  <arg name="use_sim_time" default="true" />
+	  <arg name="gui" default="true" />
+	  <arg name="headless" default="false" />
+	  <arg name="world_name" default="$(find %s_gazebo)/worlds/%s_race.world" />
+
+	  <!-- Short-term hack to support the original front_laser:=true argument for spawning
+	       the simulator. This will be removed in favour of using the config:=x arg instead. -->
+	  <arg name="front_laser" default="false" />
+	  <arg name="default_config" value="front_laser" if="$(arg front_laser)" />
+	  <arg name="default_config" value="base" unless="$(arg front_laser)" /> 
+	  <!-- end of hack -->
+
+	  <arg name="config" default="$(arg default_config)" />
+
+	  <!-- Launch Gazebo with the specified world -->
+	  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+	    <arg name="debug" value="0" />
+	    <arg name="gui" value="$(arg gui)" />
+	    <arg name="use_sim_time" value="$(arg use_sim_time)" />
+	    <arg name="headless" value="$(arg headless)" />
+	    <arg name="world_name" value="$(arg world_name)" />
+	  </include>
+
+	  <!-- Load %s's description, controllers, and teleop nodes. -->
+	  <include file="$(find %s)/launch/%s"/>
+	  <include file="$(find %s_control)/launch/control.launch" />
+	  <include file="$(find %s_control)/launch/teleop.launch">
+	    <arg name="joystick" value="false"/>
+	  </include>
+
+	  <!-- Spawn %s -->
+	  <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+		      args="-urdf -model %s -param robot_description -x 0 -y 0 -z 1.0" />
+	</launch>
+""" % (prefix, prefix, prefix, description_package_name, description_launch_file, prefix, prefix, prefix, prefix)
+
+def main():
+    if (len(sys.argv) != 5):
+        print "Usage: rosrun gazebo_package_factory generate_gazebo_package [package_prefix] [description_package_name] [description_launch_file] [output_directory]"
+        return
+    
+    #ARGS
+    global prefix
+    prefix = sys.argv[1]
+
+    global description_package_name
+    description_package_name = sys.argv[2]
+
+    global description_launch_file
+    description_launch_file = sys.argv[3]
+
+    global output_directory
+    output_directory = sys.argv[4]
+
+    # Resources directory (gazebo_package_factory path)
+    global gpf_wd
+    rospack = rospkg.RosPack()
+    gpf_wd = rospack.get_path('gazebo_package_factory')
+    print "Path to rospackage %s" % gpf_wd
+    
+    generate_file_structure(prefix)
+#    generate_empty_world_launch_file(sys.argv[1])
+    make_package_xml_file()
+    make_cmakelists_file()
+    make_empty_world_launch_file()
+    make_worlds_files()
+    make_gazebo_resources()
+
+if __name__ == '__main__': main()
+
